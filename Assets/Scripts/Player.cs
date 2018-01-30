@@ -1,63 +1,147 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
-public class Player : MonoBehaviour {
+[RequireComponent(typeof(Rigidbody2D))]
+public class Player : Character
+{
+    private static Player instance;
 
-    private bool _isFacingRight;
-    private CharacterController2D _controller;
-    private float _normalizedHorizontalSpeed;
-
-    public float MaxSpeed = 8f;
-    public float SpeedAccelerationOnGround = 10f;
-    public float SpeedAccelerationInAir = 5f;
-
-    public void Start()
+    public static Player Instance
     {
-        _controller = GetComponent<CharacterController2D>();
-        _isFacingRight = transform.localScale.x > 0;
+        get
+        {
+            if (instance == null)
+            {
+                instance = GameObject.FindObjectOfType<Player>();
+            }
+            return instance;
+        }
     }
 
-    public void Update()
+    [SerializeField]
+    private Transform[] groundPoints;
+
+    [SerializeField]
+    private LayerMask whatIsGround;
+
+    [SerializeField]
+    private float groundRadius;
+
+    private bool airControl;
+
+    [SerializeField]
+    private float jumpForce;
+
+    public Rigidbody2D MyRigidbody { get; set; }
+    public bool Jump { get; set; }
+
+    public bool Slide { get; set; }
+    public bool OnGround { get; set; }
+
+    // Use this for initialization
+    public override void Start()
+    {
+        base.Start();
+        MyRigidbody = GetComponent<Rigidbody2D>();
+    }
+
+    private void Update()
     {
         HandleInput();
+    }
 
-        var movementFactor = _controller.State.IsGrounded ? SpeedAccelerationOnGround : SpeedAccelerationInAir;
-        _controller.SetHorizontalForce(Mathf.Lerp(_controller.Velocity.x, _normalizedHorizontalSpeed * MaxSpeed, Time.deltaTime * movementFactor));
+    // Update is called once per frame
+    private void FixedUpdate()
+    {
+        float horizontal = Input.GetAxis("Horizontal");
+        OnGround = IsGrounded();
+        HandleMovement(horizontal);
+        Flip(horizontal);
+        HandleLayers();
     }
 
     private void HandleInput()
     {
-        if (Input.GetKey(KeyCode.D))
+        if (Input.GetKeyDown(KeyCode.J))
         {
-            _normalizedHorizontalSpeed = 1;
-            if (!_isFacingRight)
-            {
-                Flip();
-            }
+            MyAnimator.SetTrigger("attack");
         }
-        else if (Input.GetKey(KeyCode.A))
+        if (Input.GetKeyDown(KeyCode.K))
         {
-            _normalizedHorizontalSpeed = -1;
-            if (_isFacingRight)
-            {
-                Flip();
-            }
+            MyAnimator.SetTrigger("slide");
         }
-        else
+        if (Input.GetKeyDown(KeyCode.L))
         {
-            _normalizedHorizontalSpeed = 0;
+            MyAnimator.SetTrigger("throw");
         }
-
-        if (_controller.CanJump && Input.GetKeyDown(KeyCode.Space))
+        if (Input.GetKeyDown(KeyCode.Space))
         {
-            _controller.Jump();
+            MyAnimator.SetTrigger("jump");
         }
     }
 
-    private void Flip()
+    private void HandleMovement(float horizontal)
     {
-        transform.localScale = new Vector3(-transform.localScale.x, transform.localScale.y, transform.localScale.z);
-        _isFacingRight = transform.localScale.x > 0;
+        if (MyRigidbody.velocity.y < 0)
+        {
+            MyAnimator.SetBool("land", true);
+        }
+        if (!Attack && !Slide && (OnGround || airControl))
+        {
+            MyRigidbody.velocity = new Vector2(horizontal * movementSpeed, MyRigidbody.velocity.y);
+        }
+        if (Jump && MyRigidbody.velocity.y == 0)
+        {
+            MyRigidbody.AddForce(new Vector2(0, jumpForce));
+        }
+
+        MyAnimator.SetFloat("speed", Mathf.Abs(horizontal));
+    }
+
+    public override void ThrowKunai(int value)
+    {
+        if (!OnGround && value == 1 || OnGround && value == 0)
+        {
+            base.ThrowKunai(value);
+        }
+    }
+
+    private void Flip(float horizontal)
+    {
+        if (horizontal > 0 && !facingRight || horizontal < 0 && facingRight)
+        {
+            ChangeDirection();
+        }
+    }
+
+    private void HandleLayers()
+    {
+        if (!OnGround)
+        {
+            MyAnimator.SetLayerWeight(1, 1);
+        }
+        else
+        {
+            MyAnimator.SetLayerWeight(1, 0);
+        }
+    }
+
+    private bool IsGrounded()
+    {
+        if (MyRigidbody.velocity.y <= 0)
+        {
+            foreach (Transform point in groundPoints)
+            {
+                Collider2D[] colliders = Physics2D.OverlapCircleAll(point.position, groundRadius, whatIsGround);
+
+                for (int i = 0; i < colliders.Length; i++)
+                {
+                    if (colliders[i].gameObject != gameObject)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }

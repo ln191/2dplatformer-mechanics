@@ -28,14 +28,15 @@ public class Player : Character
 
     private bool airControl;
 
+    private bool jump;
+
     [SerializeField]
     private float jumpForce;
 
     public Rigidbody2D MyRigidbody { get; set; }
-    public bool Jump { get; set; }
 
-    public bool Slide { get; set; }
-    public bool OnGround { get; set; }
+    private bool onGround;
+    private bool slide;
 
     // Use this for initialization
     public override void Start()
@@ -53,7 +54,7 @@ public class Player : Character
     private void FixedUpdate()
     {
         float horizontal = Input.GetAxis("Horizontal");
-        OnGround = IsGrounded();
+        onGround = IsGrounded();
         HandleMovement(horizontal);
         Flip(horizontal);
         HandleLayers();
@@ -67,7 +68,8 @@ public class Player : Character
         }
         if (Input.GetKeyDown(KeyCode.K))
         {
-            MyAnimator.SetTrigger("slide");
+            MyAnimator.SetBool("slide", true);
+            slide = true;
         }
         if (Input.GetKeyDown(KeyCode.L))
         {
@@ -76,22 +78,45 @@ public class Player : Character
         if (Input.GetKeyDown(KeyCode.Space))
         {
             MyAnimator.SetTrigger("jump");
+
+            jump = true;
         }
     }
 
     private void HandleMovement(float horizontal)
     {
+        //If player is falling
         if (MyRigidbody.velocity.y < 0)
         {
-            MyAnimator.SetBool("land", true);
+            MyAnimator.SetBool("landing", true);
         }
-        if (!Attack && !Slide && (OnGround || airControl))
+        //If player is no longer falling
+        else if (MyRigidbody.velocity.y == 0)
         {
+            MyAnimator.SetBool("landing", false);
+        }
+        //Player Jumps while on the ground
+        if (onGround && jump)
+        {
+            onGround = false;
+            MyRigidbody.AddForce(new Vector2(0, jumpForce));
+            jump = false;
+        }
+
+        if (!slide)
+        {
+            // Player movement      OBS!!  make so player cannot move so fast to the sides while in the air.
             MyRigidbody.velocity = new Vector2(horizontal * movementSpeed, MyRigidbody.velocity.y);
         }
-        if (Jump && MyRigidbody.velocity.y == 0)
+
+        // Player slide,   OBS!! one can not move while slide only use the add force from movement
+        if (slide && !this.MyAnimator.GetCurrentAnimatorStateInfo(0).IsName("Slide"))
         {
-            MyRigidbody.AddForce(new Vector2(0, jumpForce));
+            if (MyRigidbody.velocity.x == 0)
+            {
+                MyAnimator.SetBool("slide", false);
+                slide = false;
+            }
         }
 
         MyAnimator.SetFloat("speed", Mathf.Abs(horizontal));
@@ -99,7 +124,7 @@ public class Player : Character
 
     public override void ThrowKunai(int value)
     {
-        if (!OnGround && value == 1 || OnGround && value == 0)
+        if (!onGround && value == 1 || onGround && value == 0)
         {
             base.ThrowKunai(value);
         }
@@ -113,9 +138,12 @@ public class Player : Character
         }
     }
 
+    /// <summary>
+    /// Change the weight of the animation layers, between ground and air layer
+    /// </summary>
     private void HandleLayers()
     {
-        if (!OnGround)
+        if (!onGround)
         {
             MyAnimator.SetLayerWeight(1, 1);
         }
@@ -125,6 +153,10 @@ public class Player : Character
         }
     }
 
+    /// <summary>
+    /// Method check to see if the ground points collides with ground obj in set layer mask
+    /// </summary>
+    /// <returns></returns>
     private bool IsGrounded()
     {
         if (MyRigidbody.velocity.y <= 0)
